@@ -1,2 +1,8 @@
 [default]
 version = 'v0.0.1'
+
+[data]
+root = 'data'
+
+[outputs]
+root = 'outputs'

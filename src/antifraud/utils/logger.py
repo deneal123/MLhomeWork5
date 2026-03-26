@@ -1,8 +1,9 @@
 import logging
 import sys
+from typing import Optional
 from uuid import uuid4
 
-from antifrod.config import PROJECT_ROOT
+from antifraud.config import PROJECT_ROOT
 
 
 def setup_logging(name: str) -> logging.Logger:

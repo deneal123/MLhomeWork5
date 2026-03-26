@@ -1,6 +1,7 @@
 """Entry point for running antifrod as a module."""
 
-from antifrod.cli import main
+from antifraud.cli import run
 
-if __name__ == "__main__":
-    main()
+
+if __name__ == '__main__':
+    run()

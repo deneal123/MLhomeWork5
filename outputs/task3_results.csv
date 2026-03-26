@@ -1,0 +1,6 @@
+,Model,ROC-AUC,PR-AUC
+0,IForest,,0.0
+1,LOF,,0.0
+2,HBOS,,0.0
+3,KNN,,0.0
+4,PCA,,0.0
