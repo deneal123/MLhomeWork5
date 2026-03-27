@@ -101,46 +101,50 @@ class Task4(TaskBase):
                 self.logger.error(f"PYOD {name} failed: {e}")
 
         # в) PYTOD модели (доступно 5 моделей)
-        pytod_models = {
-            'IForest': lambda: __import__('pytod.models.iforest', fromlist=['IForest']).IForest(
-                n_estimators=100, contamination=0.02, random_state=42
-            ),
-            'LOF': lambda: __import__('pytod.models.lof', fromlist=['LOF']).LOF(
-                n_neighbors=20, contamination=0.02
-            ),
-            'HBOS': lambda: __import__('pytod.models.hbos', fromlist=['HBOS']).HBOS(
-                n_bins=10, contamination=0.02
-            ),
-            'KNN': lambda: __import__('pytod.models.knn', fromlist=['KNN']).KNN(
-                n_neighbors=5, contamination=0.02
-            ),
-            'PCA': lambda: __import__('pytod.models.pca', fromlist=['PCA']).PCA(
-                n_components=5, contamination=0.02, random_state=42
-            ),
+        pytod_model_specs = {
+            'LOF': ('pytod.models.lof', 'LOF', {'n_neighbors': 20, 'contamination': 0.02}),
+            'HBOS': ('pytod.models.hbos', 'HBOS', {'n_bins': 10, 'contamination': 0.02}),
+            'KNN': ('pytod.models.knn', 'KNN', {'n_neighbors': 5, 'contamination': 0.02}),
+            'PCA': ('pytod.models.pca', 'PCA', {'n_components': 5, 'contamination': 0.02}),
         }
 
+        pytod_models = {}
+        for name, (module_name, class_name, kwargs) in pytod_model_specs.items():
+            try:
+                module = __import__(module_name, fromlist=[class_name])
+                cls = getattr(module, class_name)
+                pytod_models[name] = lambda cls=cls, kwargs=kwargs: cls(**kwargs)
+            except Exception as e:
+                self.logger.warning(f"PYTOD model {name} unavailable: {e}")
+ 
         self.logger.info("Training PYTOD models")
         pytod_scores = {}
+        import torch
+
+        X_train_torch = torch.from_numpy(X_train_s).float()
+        X_test_torch = torch.from_numpy(X_test_s).float()
         for name, model_fn in tqdm(pytod_models.items(), desc='PYTOD', unit='model'):
-            try:
-                model = model_fn()
-                start = time.time()
-                model.fit(X_train_s)
-                train_time = time.time() - start
-                
-                scores = model.decision_function(X_test_s)
-                pytod_scores[name] = scores
-                
-                results.append({
-                    'Library': 'PYTOD',
-                    'Model': name,
-                    'ROC-AUC': roc_auc_score(y_test, scores),
-                    'PR-AUC': average_precision_score(y_test, scores),
-                    'Train Time (s)': train_time,
-                })
-                self.logger.info(f"PYTOD {name}: ROC-AUC={roc_auc_score(y_test, scores):.4f}, Time={train_time:.2f}s")
-            except Exception as e:
-                self.logger.error(f"PYTOD {name} failed: {e}")
+             try:
+                 model = model_fn()
+                 start = time.time()
+                 model.fit(X_train_torch)
+                 train_time = time.time() - start
+                 
+                 scores = model.decision_function(X_test_torch)
+                 if hasattr(scores, 'detach'):
+                     scores = scores.detach().cpu().numpy()
+                 pytod_scores[name] = scores
+ 
+                 results.append({
+                     'Library': 'PYTOD',
+                     'Model': name,
+                     'ROC-AUC': roc_auc_score(y_test, scores),
+                     'PR-AUC': average_precision_score(y_test, scores),
+                     'Train Time (s)': train_time,
+                 })
+                 self.logger.info(f"PYTOD {name}: ROC-AUC={roc_auc_score(y_test, scores):.4f}, Time={train_time:.2f}s")
+             except Exception as e:
+                 self.logger.error(f"PYTOD {name} failed: {e}")
 
         # г) Единая таблица
         df_results = pd.DataFrame(results)
@@ -148,17 +152,28 @@ class Task4(TaskBase):
         # д) Сравнение и статистическая значимость
         self.logger.info("=== Task4 Results Summary ===")
         self.logger.info(df_results.to_string(index=False))
-
+ 
         # Статистический анализ для пар с одинаковыми моделями
         self.logger.info("=== Statistical Significance (paired t-test) ===")
+ 
+        def safe_roc(y_true, scores):
+            try:
+                return roc_auc_score(y_true, scores)
+            except Exception:
+                return float('nan')
+ 
+        def safe_pr(y_true, scores):
+            try:
+                return average_precision_score(y_true, scores)
+            except Exception:
+                return float('nan')
  
         significance_results = []
         for model_name in pytod_scores.keys():
             if model_name in pyod_scores:
-                pyod_auc = roc_auc_score(y_test, pyod_scores[model_name])
-                pytod_auc = roc_auc_score(y_test, pytod_scores[model_name])
+                pyod_auc = safe_roc(y_test, pyod_scores[model_name])
+                pytod_auc = safe_roc(y_test, pytod_scores[model_name])
  
-                # Bootstrap для оценки стабильности
                 n_bootstrap = 100
                 pyod_bootstrap = []
                 pytod_bootstrap = []
@@ -166,12 +181,21 @@ class Task4(TaskBase):
                 for _ in range(n_bootstrap):
                     idx = np.random.choice(len(X_test_s), size=len(X_test_s), replace=True)
                     y_bs = y_test.iloc[idx] if hasattr(y_test, 'iloc') else y_test[idx]
+                    try:
+                        pyod_bootstrap.append(roc_auc_score(y_bs, pyod_scores[model_name][idx]))
+                    except Exception:
+                        pyod_bootstrap.append(np.nan)
+                    try:
+                        pytod_bootstrap.append(roc_auc_score(y_bs, pytod_scores[model_name][idx]))
+                    except Exception:
+                        pytod_bootstrap.append(np.nan)
  
-                    pyod_bootstrap.append(roc_auc_score(y_bs, pyod_scores[model_name]))
-                    pytod_bootstrap.append(roc_auc_score(y_bs, pytod_scores[model_name]))
- 
-                # t-test
-                t_stat, p_value = stats.ttest_rel(pyod_bootstrap, pytod_bootstrap)
+                pyod_bootstrap = [v for v in pyod_bootstrap if not np.isnan(v)]
+                pytod_bootstrap = [v for v in pytod_bootstrap if not np.isnan(v)]
+                if len(pyod_bootstrap) > 1 and len(pyod_bootstrap) == len(pytod_bootstrap):
+                    p_value = stats.ttest_rel(pyod_bootstrap, pytod_bootstrap)
+                else:
+                    p_value = float('nan')
  
                 significance_results.append({
                     'Model': model_name,
@@ -183,7 +207,10 @@ class Task4(TaskBase):
                 })
  
                 sig_marker = '*' if p_value < 0.05 else ''
-                self.logger.info(f"{model_name}: PYOD={pyod_auc:.4f}, PYTOD={pytod_auc:.4f}, diff={pyod_auc-pytod_auc:.4f}, p={p_value:.4f} {sig_marker}")
+                self.logger.info(
+                    f"{model_name}: PYOD={pyod_auc:.4f}, PYTOD={pytod_auc:.4f}, diff={pyod_auc-pytod_auc:.4f}, "
+                    f"p={p_value:.4f} {sig_marker}"
+                )
  
         df_sig = pd.DataFrame(significance_results)
         if not df_sig.empty:

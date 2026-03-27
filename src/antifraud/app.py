@@ -27,25 +27,76 @@ class AntifraudPipeline:
         else:
             self.logger.info('GPU не доступен')
 
-    def run(self):
+    def run(self, task=None):
         self._check_gpu()
 
-        print("\n" + "="*60)
-        print("EDA Analysis")
-        print("="*60)
+        def save_results(df, filename):
+            if isinstance(df, pd.DataFrame):
+                df.to_csv(self.loader.output_path(filename), index=False)
+            else:
+                pd.DataFrame(df).to_csv(self.loader.output_path(filename), index=False)
+
+        def run_task1():
+            bank_df = self.loader.load_banksim()
+            BankSimEDA.run(bank_df, self.loader.output_root)
+            r = self.task1.run()
+            save_results(r, 'task1_results.csv')
+            return r
+
+        def run_task2():
+            credit_df = self.loader.load_creditcard()
+            CreditCardEDA.run(credit_df, self.loader.output_root)
+            r = self.task2.run()
+            save_results(r, 'task2_results.csv')
+            return r
+
+        def run_task3():
+            weibo_data = self.loader.load_weibo()
+            if weibo_data is not None:
+                WeiboEDA.run(weibo_data, self.loader.output_root)
+            else:
+                self.logger.warning('Weibo недоступен')
+            r = self.task3.run(weibo_data)
+            save_results(r, 'task3_results.csv')
+            return r
+
+        def run_task4():
+            bank_df = self.loader.load_banksim()
+            BankSimEDA.run(bank_df, self.loader.output_root)
+            r = self.task4.run()
+            save_results(r, 'task4_results.csv')
+            return r
+
+        # run selected task only
+        if task in [1, 2, 3, 4]:
+            self.logger.info(f'Run task {task} only')
+            if task == 1:
+                run_task1()
+            elif task == 2:
+                run_task2()
+            elif task == 3:
+                run_task3()
+            elif task == 4:
+                run_task4()
+            self.logger.info('Selected task completed')
+            return
+
+        self.logger.info("\n" + "="*60)
+        self.logger.info("EDA Analysis")
+        self.logger.info("="*60)
         
         # EDA для BankSim (Task1, Task4)
-        print("\n--- BankSim EDA ---")
+        self.logger.info("\n--- BankSim EDA ---")
         bank_df = self.loader.load_banksim()
         BankSimEDA.run(bank_df, self.loader.output_root)
 
         # EDA для CreditCard (Task2)
-        print("\n--- CreditCard EDA ---")
+        self.logger.info("\n--- CreditCard EDA ---")
         credit_df = self.loader.load_creditcard()
         CreditCardEDA.run(credit_df, self.loader.output_root)
 
         # EDA для Weibo (Task3)
-        print("\n--- Weibo EDA ---")
+        self.logger.info("\n--- Weibo EDA ---")
         weibo_data = self.loader.load_weibo()
         if weibo_data is not None:
             WeiboEDA.run(weibo_data, self.loader.output_root)
@@ -58,9 +109,9 @@ class AntifraudPipeline:
             plt.close(fig)
 
         # Запуск заданий
-        print("\n" + "="*60)
-        print("Task 1: VAE vs AutoEncoder vs Classic OD")
-        print("="*60)
+        self.logger.info("\n" + "="*60)
+        self.logger.info("Task 1: VAE vs AutoEncoder vs Classic OD")
+        self.logger.info("="*60)
         results1 = self.task1.run()
         results1.to_csv(self.loader.output_path('task1_results.csv'))
         
@@ -74,9 +125,9 @@ class AntifraudPipeline:
         fig.savefig(self.loader.output_path('task1_roc_auc.png'), dpi=100)
         plt.close(fig)
 
-        print("\n" + "="*60)
-        print("Task 2: Unsupervised Detectors on CreditCard")
-        print("="*60)
+        self.logger.info("\n" + "="*60)
+        self.logger.info("Task 2: Unsupervised Detectors on CreditCard")
+        self.logger.info("="*60)
         results2 = self.task2.run()
         results2.to_csv(self.loader.output_path('task2_results.csv'))
 
@@ -90,9 +141,9 @@ class AntifraudPipeline:
         fig.savefig(self.loader.output_path('task2_roc_auc.png'), dpi=100)
         plt.close(fig)
 
-        print("\n" + "="*60)
-        print("Task 3: Weibo Anomaly Detection")
-        print("="*60)
+        self.logger.info("\n" + "="*60)
+        self.logger.info("Task 3: Weibo Anomaly Detection")
+        self.logger.info("="*60)
         results3 = self.task3.run(weibo_data)
         if isinstance(results3, pd.DataFrame):
             results3.to_csv(self.loader.output_path('task3_results.csv'))
@@ -111,9 +162,9 @@ class AntifraudPipeline:
         else:
             pd.DataFrame(results3).to_csv(self.loader.output_path('task3_results.csv'))
 
-        print("\n" + "="*60)
-        print("Task 4: PYOD vs PYTOD Comparison")
-        print("="*60)
+        self.logger.info("\n" + "="*60)
+        self.logger.info("Task 4: PYOD vs PYTOD Comparison")
+        self.logger.info("="*60)
         results4 = self.task4.run()
         results4.to_csv(self.loader.output_path('task4_results.csv'))
         
@@ -135,10 +186,10 @@ class AntifraudPipeline:
         fig.savefig(self.loader.output_path('task4_roc_auc.png'), dpi=100)
         plt.close(fig)
         
-        print("\n" + "="*60)
-        print("All tasks completed! Results saved to outputs/")
-        print("="*60)
+        self.logger.info("\n" + "="*60)
+        self.logger.info("All tasks completed! Results saved to outputs/")
+        self.logger.info("="*60)
 
 
-def main():
-    AntifraudPipeline().run()
+def main(task=None):
+    AntifraudPipeline().run(task=task)
