@@ -35,7 +35,6 @@ class CreditCardLoader(DatasetLoader):
                     'Скачайте вручную и поместите в creditcard_data/ или проверьте прокси.'
                 ) from err
 
-        # Validate zip integrity and retry once
         def _is_valid_zip(path):
             try:
                 with zipfile.ZipFile(path, 'r') as z:

@@ -19,7 +19,6 @@ from antifraud.task_module.base import TaskBase
 
 class Task2(TaskBase):
     def run(self):
-        # а) Загрузка CreditCard и разделение на train/test (тест ≥20%)
         df = self.loader.load_creditcard()
         X = df.drop(['Class', 'Time'], axis=1)
         y = df['Class']
@@ -35,9 +34,7 @@ class Task2(TaskBase):
         self.logger.info(f"Train size: {len(X_train)}, Test size: {len(X_test)}")
         self.logger.info(f"Test ratio: {len(X_test)/len(X)*100:.1f}%")
 
-        # б) Обучаем ≥6 детекторов
         detectors = {
-            # Классические методы
             'IForest': __import__('pyod.models.iforest', fromlist=['IForest']).IForest(
                 n_estimators=100, contamination=0.0017, random_state=42
             ),
@@ -89,10 +86,8 @@ class Task2(TaskBase):
             except Exception as e:
                 self.logger.error(f"{name} failed: {e}")
 
-        # в) Единая таблица результатов
         df_results = pd.DataFrame(results).T.sort_values('ROC-AUC', ascending=False)
         
-        # г) Вывод и сравнение
         self.logger.info("=== Task2 Results Summary ===")
         self.logger.info(df_results.to_string())
         
@@ -100,7 +95,6 @@ class Task2(TaskBase):
         best_score = df_results['ROC-AUC'].max()
         self.logger.info(f"Best model: {best_model} with ROC-AUC = {best_score:.4f}")
         
-        # Статистический анализ
         mean_auc = df_results['ROC-AUC'].mean()
         std_auc = df_results['ROC-AUC'].std()
         self.logger.info(f"Mean ROC-AUC: {mean_auc:.4f} ± {std_auc:.4f}")

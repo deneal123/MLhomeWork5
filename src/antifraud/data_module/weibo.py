@@ -10,7 +10,6 @@ class WeiboLoader(DatasetLoader):
         data_dir.mkdir(exist_ok=True)
 
         try:
-            # Добавляем safe globals для загрузки torch geometric данных
             import torch
             try:
                 from torch_geometric.data.storage import GlobalStorage
@@ -18,7 +17,6 @@ class WeiboLoader(DatasetLoader):
             except Exception:
                 pass
  
-            # Пробуем напрямую через pygod.datasets (если доступно)
             try:
                 from pygod.datasets import load_weibo
                 return load_weibo(root=str(data_dir))
@@ -27,7 +25,6 @@ class WeiboLoader(DatasetLoader):
                 if self.logger is not None:
                     self.logger.warning(f'pygod.datasets.load_weibo failed: {e}')
 
-            # Пробуем через универсальный loader в pygod.utils
             try:
                 from pygod.utils import load_data
                 from inspect import signature

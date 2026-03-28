@@ -3,6 +3,7 @@ EDA для Weibo датасета (используется в Task3)
 Требуется минимум 4 графика
 """
 import matplotlib.pyplot as plt
+import seaborn as sns
 from collections import Counter
 import pandas as pd
 import numpy as np
@@ -26,64 +27,66 @@ class WeiboEDA:
         X = data.x.numpy()
         y = data.y.numpy()
 
-        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        sns.set_theme(style='whitegrid')
+
+        fig, axes = plt.subplots(2, 3, figsize=(16, 10))
         
-        # 1. Распределение степеней узлов
         ax = axes[0, 0]
-        degree_values = list(degrees.values())
-        ax.hist(degree_values, bins=50, color='steelblue', alpha=0.7)
+        degree_values = np.array(list(degrees.values()))
+        sns.histplot(degree_values[degree_values > 0], bins=50, color='steelblue', ax=ax)
         ax.set_xlabel('Degree')
         ax.set_ylabel('Frequency')
         ax.set_title('Node Degree Distribution')
         ax.set_yscale('log')
-        
-        # 2. Распределение меток (0 - normal, 1 - anomaly)
+
         ax = axes[0, 1]
-        label_counts = pd.Series(y).value_counts()
-        ax.pie(label_counts, labels=['Normal', 'Spammer'], autopct='%1.1f%%',
-               colors=['green', 'red'], explode=[0, 0.1])
-        ax.set_title('Label Distribution (Normal vs Spammer)')
-        
-        # 3. Распределение признаков (среднее значение по узлам)
+        label_counts = pd.Series(y).value_counts().sort_index()
+        label_names = ['Normal', 'Spammer']
+        sns.barplot(x=label_names, y=label_counts.values, palette=['green', 'red'], ax=ax)
+        for i, v in enumerate(label_counts.values):
+            ax.text(i, v + label_counts.max()*0.01, f"{v} ({v/label_counts.sum()*100:.2f}%)", ha='center')
+        ax.set_title('Label Distribution')
+        ax.set_ylabel('Count')
+
         ax = axes[0, 2]
         feature_means = X.mean(axis=0)
-        ax.hist(feature_means, bins=30, color='teal', alpha=0.7)
+        sns.histplot(feature_means, bins=30, color='teal', ax=ax)
         ax.set_xlabel('Mean Feature Value')
         ax.set_ylabel('Frequency')
         ax.set_title('Feature Mean Distribution')
-        
-        # 4. Распределение дисперсии признаков
+
         ax = axes[1, 0]
         feature_vars = X.var(axis=0)
-        ax.hist(feature_vars, bins=30, color='purple', alpha=0.7)
+        sns.histplot(feature_vars, bins=30, color='purple', ax=ax)
         ax.set_xlabel('Feature Variance')
         ax.set_ylabel('Frequency')
         ax.set_title('Feature Variance Distribution')
-        
-        # 5. Сравнение признаков для normal vs anomaly узлов
+        ax.set_xscale('log')
+
         ax = axes[1, 1]
         normal_mean = X[y == 0].mean(axis=0)
         anomaly_mean = X[y == 1].mean(axis=0)
-        ax.plot(normal_mean[:20], label='Normal', alpha=0.7)
-        ax.plot(anomaly_mean[:20], label='Spammer', alpha=0.7)
+        max_index = min(20, X.shape[1])
+        ax.plot(np.arange(max_index), normal_mean[:max_index], label='Normal', marker='o', alpha=0.7)
+        ax.plot(np.arange(max_index), anomaly_mean[:max_index], label='Spammer', marker='o', alpha=0.7)
         ax.set_xlabel('Feature Index')
         ax.set_ylabel('Mean Value')
-        ax.set_title('Feature Comparison (First 20)')
+        ax.set_title('Feature Mean Comparison (First 20)')
         ax.legend()
-        
-        # 6. Количество связей для normal vs anomaly
+
         ax = axes[1, 2]
-        normal_degrees = [degrees.get(i, 0) for i in range(len(y)) if y[i] == 0]
-        anomaly_degrees = [degrees.get(i, 0) for i in range(len(y)) if y[i] == 1]
-        ax.hist([normal_degrees, anomaly_degrees], bins=30, alpha=0.6, 
-                label=['Normal', 'Spammer'], color=['green', 'red'])
+        normal_degrees = np.array([degrees.get(i, 0) for i in range(len(y)) if y[i] == 0])
+        anomaly_degrees = np.array([degrees.get(i, 0) for i in range(len(y)) if y[i] == 1])
+        sns.histplot(normal_degrees, bins=30, color='green', label='Normal', ax=ax, kde=False, stat='density')
+        sns.histplot(anomaly_degrees, bins=30, color='red', label='Spammer', ax=ax, kde=False, stat='density', alpha=0.7)
         ax.set_xlabel('Node Degree')
-        ax.set_ylabel('Frequency')
+        ax.set_ylabel('Density')
         ax.set_title('Degree Distribution by Label')
+        ax.set_yscale('log')
         ax.legend()
         
         fig.tight_layout()
-        fig.savefig(out_dir / 'eda_weibo.png', dpi=100)
+        fig.savefig(out_dir / 'eda_weibo.png', dpi=120)
         plt.close(fig)
 
         WeiboEDA._logger.info("Weibo EDA saved to eda_weibo.png")

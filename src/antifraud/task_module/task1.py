@@ -19,7 +19,6 @@ from antifraud.task_module.base import TaskBase
 
 class Task1(TaskBase):
     def run(self):
-        # а) Загрузка BankSim и разделение на train/test
         df = self.loader.load_banksim()
         df = df.copy()
         df.drop(['zipMerchant', 'zipcodeOri'], axis=1, inplace=True)
@@ -41,7 +40,6 @@ class Task1(TaskBase):
         n_components = min(X_train_s.shape[1], 10)
         results = {}
 
-        # б) VAE - обучение и метрика
         self.logger.info("Training VAE")
         try:
             from pyod.models.vae import VAE
@@ -66,7 +64,6 @@ class Task1(TaskBase):
         except Exception as e:
             self.logger.error(f"VAE failed: {e}")
 
-        # в) Classic OD - IsolationForest
         self.logger.info("Training IsolationForest")
         try:
             from pyod.models.iforest import IForest
@@ -83,7 +80,6 @@ class Task1(TaskBase):
         except Exception as e:
             self.logger.error(f"IForest failed: {e}")
 
-        # Дополнительные классические методы
         self.logger.info("Training Classic OD methods")
         
         classic_models = {
@@ -125,7 +121,6 @@ class Task1(TaskBase):
             except Exception as e:
                 self.logger.error(f"Classic_{name} failed: {e}")
 
-        # д) Сравнение и вывод
         self.logger.info("=== Task 1 Results Summary ===")
         
         df_results = pd.DataFrame(results).T.sort_values('ROC-AUC', ascending=False)

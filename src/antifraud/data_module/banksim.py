@@ -2,11 +2,11 @@ from pathlib import Path
 import os
 import pandas as pd
 from subprocess import run
-
 from antifraud.data_module.base import DatasetLoader
 
 
 class BankSimLoader(DatasetLoader):
+
     def load(self, data_root):
         repo_dir = data_root / 'fraud-detection-on-banksim-data'
         if not repo_dir.exists():

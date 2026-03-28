@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
 
 from antifraud.task_module.base import TaskBase
 
@@ -21,7 +22,6 @@ class Task3(TaskBase):
             self.logger.warning("Weibo data not available, returning NaN")
             return pd.DataFrame({'ROC-AUC': [np.nan], 'PR-AUC': [np.nan], 'Model': ['N/A']})
 
-        # а) Разделение на train/test (тест ≥20%)
         train_mask = data.train_mask.numpy()
         test_mask = data.test_mask.numpy()
 
@@ -34,17 +34,14 @@ class Task3(TaskBase):
         y_test = y[test_mask]
 
         if len(np.unique(y_train)) < 2 or len(np.unique(y_test)) < 2:
-            self.logger.warning('Weibo labels have single class in train/test split; using synthetic balanced labels for evaluation')
-            rng = np.random.RandomState(42)
-            y = np.zeros(len(X), dtype=int)
-            anomalies = rng.choice(len(X), size=max(1, len(X) // 10), replace=False)
-            y[anomalies] = 1
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+            self.logger.warning('Weibo split has class imbalance in test; using stratified train_test_split to include anomalies in test')
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
 
         test_ratio = len(X_test) / (len(X_train) + len(X_test))
         self.logger.info(f"Train size: {len(X_train)}, Test size: {len(X_test)}, Test ratio: {test_ratio*100:.1f}%")
 
-        # Стандартизация
         scaler = StandardScaler()
         X_train_s = scaler.fit_transform(X_train)
         X_test_s = scaler.transform(X_test)
@@ -61,105 +58,75 @@ class Task3(TaskBase):
             return roc, pr
 
         results = []
-
-        # б,в) Используем несколько алгоритмов и выбираем лучший
         
-        # 1. IsolationForest
-        self.logger.info("Training IForest")
-        try:
-            from pyod.models.iforest import IForest
-            model = IForest(
-                n_estimators=200,
-                contamination=0.1,
-                max_samples=min(256, len(X_train_s)),
-                random_state=42
-            )
-            model.fit(X_train_s)
-            scores = model.decision_function(X_test_s)
-            roc_auc, pr_auc = safe_scores(y_test, scores)
-            results.append({
-                'Model': 'IForest',
-                'ROC-AUC': roc_auc,
-                'PR-AUC': pr_auc,
-            })
-            self.logger.info(f"IForest: ROC-AUC={roc_auc:.4f}, PR-AUC={pr_auc:.4f}")
-        except Exception as e:
-            self.logger.error(f"IForest failed: {e}")
+        model_candidates = {
+            'IForest': lambda: __import__('pyod.models.iforest', fromlist=['IForest']).IForest(
+                n_estimators=200, contamination=0.1, max_samples=min(256, len(X_train_s)), random_state=42
+            ),
+            'LOF': lambda: __import__('pyod.models.lof', fromlist=['LOF']).LOF(
+                n_neighbors=15, contamination=0.1, novelty=True, n_jobs=-1
+            ),
+            'HBOS': lambda: __import__('pyod.models.hbos', fromlist=['HBOS']).HBOS(
+                n_bins=15, contamination=0.1
+            ),
+            'KNN': lambda: __import__('pyod.models.knn', fromlist=['KNN']).KNN(
+                n_neighbors=10, contamination=0.1, n_jobs=-1
+            ),
+            'PCA': lambda: __import__('pyod.models.pca', fromlist=['PCA']).PCA(
+                n_components=min(10, X_train_s.shape[1]), contamination=0.1
+            ),
+            'CBLOF': lambda: __import__('pyod.models.cblof', fromlist=['CBLOF']).CBLOF(
+                n_clusters=8, contamination=0.1, random_state=42, check_estimator=False
+            ),
+            'ABOD': lambda: __import__('pyod.models.abod', fromlist=['ABOD']).ABOD(
+                contamination=0.1
+            ),
+            'OCSVM': lambda: __import__('pyod.models.ocsvm', fromlist=['OCSVM']).OCSVM(
+                kernel='rbf', nu=0.02
+            ),
+        }
 
-        # 2. LOF
-        self.logger.info("Training LOF")
-        try:
-            from pyod.models.lof import LOF
-            lof = LOF(n_neighbors=15, contamination=0.1, novelty=True, n_jobs=-1)
-            lof.fit(X_train_s)
-            scores_lof = lof.decision_function(X_test_s)
-            roc_auc, pr_auc = safe_scores(y_test, scores_lof)
-            results.append({
-                'Model': 'LOF',
-                'ROC-AUC': roc_auc,
-                'PR-AUC': pr_auc,
-            })
-            self.logger.info(f"LOF: ROC-AUC={roc_auc:.4f}, PR-AUC={pr_auc:.4f}")
-        except Exception as e:
-            self.logger.error(f"LOF failed: {e}")
+        stacking_features = []
+        stacking_labels_train = []
+        stacking_labels_test = []
+        model_scores_train = {}
+        model_scores_test = {}
 
-        # 3. HBOS
-        self.logger.info("Training HBOS")
-        try:
-            from pyod.models.hbos import HBOS
-            hbos = HBOS(n_bins=15, contamination=0.1)
-            hbos.fit(X_train_s)
-            scores_hbos = hbos.decision_function(X_test_s)
-            roc_auc, pr_auc = safe_scores(y_test, scores_hbos)
-            results.append({
-                'Model': 'HBOS',
-                'ROC-AUC': roc_auc,
-                'PR-AUC': pr_auc,
-            })
-            self.logger.info(f"HBOS: ROC-AUC={roc_auc:.4f}, PR-AUC={pr_auc:.4f}")
-        except Exception as e:
-            self.logger.error(f"HBOS failed: {e}")
+        for name, ctor in model_candidates.items():
+            self.logger.info(f"Training {name}")
+            try:
+                model = ctor()
+                model.fit(X_train_s)
+                train_scores = model.decision_function(X_train_s)
+                test_scores = model.decision_function(X_test_s)
+                model_scores_train[name] = train_scores
+                model_scores_test[name] = test_scores
 
-        # 4. KNN
-        self.logger.info("Training KNN")
-        try:
-            from pyod.models.knn import KNN
-            knn = KNN(n_neighbors=10, contamination=0.1, n_jobs=-1)
-            knn.fit(X_train_s)
-            scores_knn = knn.decision_function(X_test_s)
-            roc_auc, pr_auc = safe_scores(y_test, scores_knn)
-            results.append({
-                'Model': 'KNN',
-                'ROC-AUC': roc_auc,
-                'PR-AUC': pr_auc,
-            })
-            self.logger.info(f"KNN: ROC-AUC={roc_auc:.4f}, PR-AUC={pr_auc:.4f}")
-        except Exception as e:
-            self.logger.error(f"KNN failed: {e}")
+                roc_auc, pr_auc = safe_scores(y_test, test_scores)
+                results.append({'Model': name, 'ROC-AUC': roc_auc, 'PR-AUC': pr_auc})
+                self.logger.info(f"{name}: ROC-AUC={roc_auc:.4f}, PR-AUC={pr_auc:.4f}")
+            except Exception as e:
+                self.logger.error(f"{name} failed: {e}")
+                continue
 
-        # 5. PCA
-        self.logger.info("Training PCA")
-        try:
-            from pyod.models.pca import PCA
-            pca = PCA(n_components=min(10, X_train_s.shape[1]), contamination=0.1, random_state=42)
-            pca.fit(X_train_s)
-            scores_pca = pca.decision_function(X_test_s)
-            roc_auc, pr_auc = safe_scores(y_test, scores_pca)
-            results.append({
-                'Model': 'PCA',
-                'ROC-AUC': roc_auc,
-                'PR-AUC': pr_auc,
-            })
-            self.logger.info(f"PCA: ROC-AUC={roc_auc:.4f}, PR-AUC={pr_auc:.4f}")
-        except Exception as e:
-            self.logger.error(f"PCA failed: {e}")
-
-        # Создаём DataFrame и находим лучшую модель
+        if model_scores_train and model_scores_test:
+            self.logger.info("Training stacking meta-model")
+            X_meta_train = np.vstack([model_scores_train[m] for m in model_scores_train]).T
+            X_meta_test = np.vstack([model_scores_test[m] for m in model_scores_test]).T
+            try:
+                meta = LogisticRegression(class_weight='balanced', max_iter=1000, solver='liblinear')
+                meta.fit(X_meta_train, y_train)
+                meta_scores = meta.predict_proba(X_meta_test)[:, 1]
+                meta_roc, meta_pr = safe_scores(y_test, meta_scores)
+                results.append({'Model': 'Stacking', 'ROC-AUC': meta_roc, 'PR-AUC': meta_pr})
+                self.logger.info(f"Stacking: ROC-AUC={meta_roc:.4f}, PR-AUC={meta_pr:.4f}")
+            except Exception as e:
+                self.logger.error(f"Stacking failed: {e}")
+ 
         df_results = pd.DataFrame(results)
         if len(df_results) == 0:
             return pd.DataFrame({'ROC-AUC': [np.nan], 'PR-AUC': [np.nan], 'Model': ['N/A']})
-
-        # Если ROC-AUC все NaN (например, один класс в y_test), то idxmax упадёт
+ 
         if df_results['ROC-AUC'].isna().all():
             best_roc_auc = float('nan')
             best_model = 'N/A'
@@ -172,7 +139,6 @@ class Task3(TaskBase):
         self.logger.info(df_results.to_string(index=False))
         self.logger.info(f"Best model: {best_model} with ROC-AUC = {best_roc_auc:.4f}")
 
-        # г) Проверка достижения ROC-AUC ≥ 0.9
         if best_roc_auc >= 0.9:
             self.logger.info(f"SUCCESS: ROC-AUC >= 0.9 achieved ({best_roc_auc:.4f})")
         else:

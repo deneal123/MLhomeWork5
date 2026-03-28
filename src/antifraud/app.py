@@ -41,6 +41,18 @@ class AntifraudPipeline:
             BankSimEDA.run(bank_df, self.loader.output_root)
             r = self.task1.run()
             save_results(r, 'task1_results.csv')
+            try:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                r['ROC-AUC'].sort_values().plot(kind='barh', ax=ax, color='steelblue')
+                ax.set_xlabel('ROC-AUC')
+                ax.set_title('Task 1: VAE vs AE vs Classic OD')
+                ax.axvline(x=0.5, color='red', linestyle='--', label='Random')
+                ax.legend()
+                fig.tight_layout()
+                fig.savefig(self.loader.output_path('task1_roc_auc.png'), dpi=100)
+                plt.close(fig)
+            except Exception as e:
+                self.logger.error(f"Task1 plot failed: {e}")
             return r
 
         def run_task2():
@@ -48,6 +60,18 @@ class AntifraudPipeline:
             CreditCardEDA.run(credit_df, self.loader.output_root)
             r = self.task2.run()
             save_results(r, 'task2_results.csv')
+            try:
+                fig, ax = plt.subplots(figsize=(12, 6))
+                r['ROC-AUC'].sort_values().plot(kind='barh', ax=ax, color='teal')
+                ax.set_xlabel('ROC-AUC')
+                ax.set_title('Task 2: Unsupervised Detectors Comparison')
+                ax.axvline(x=0.5, color='red', linestyle='--', label='Random')
+                ax.legend()
+                fig.tight_layout()
+                fig.savefig(self.loader.output_path('task2_roc_auc.png'), dpi=100)
+                plt.close(fig)
+            except Exception as e:
+                self.logger.error(f"Task2 plot failed: {e}")
             return r
 
         def run_task3():
@@ -58,6 +82,21 @@ class AntifraudPipeline:
                 self.logger.warning('Weibo недоступен')
             r = self.task3.run(weibo_data)
             save_results(r, 'task3_results.csv')
+            try:
+                df_plot = r if isinstance(r, pd.DataFrame) else pd.DataFrame(r)
+                if 'Model' in df_plot.columns and 'ROC-AUC' in df_plot.columns:
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    df_plot.set_index('Model')['ROC-AUC'].sort_values().plot(kind='barh', ax=ax, color='purple')
+                    ax.set_xlabel('ROC-AUC')
+                    ax.set_title('Task 3: Weibo Anomaly Detection')
+                    ax.axvline(x=0.9, color='green', linestyle='--', label='Target 0.9')
+                    ax.axvline(x=0.5, color='red', linestyle='--', label='Random')
+                    ax.legend()
+                    fig.tight_layout()
+                    fig.savefig(self.loader.output_path('task3_roc_auc.png'), dpi=100)
+                    plt.close(fig)
+            except Exception as e:
+                self.logger.error(f"Task3 plot failed: {e}")
             return r
 
         def run_task4():
@@ -65,6 +104,21 @@ class AntifraudPipeline:
             BankSimEDA.run(bank_df, self.loader.output_root)
             r = self.task4.run()
             save_results(r, 'task4_results.csv')
+            try:
+                fig, ax = plt.subplots(figsize=(12, 6))
+                colors = ['steelblue' if lib == 'PYOD' else 'orange' for lib in r['Library']]
+                r.sort_values('ROC-AUC').plot(kind='barh', x='Model', y='ROC-AUC', ax=ax, color=colors)
+                ax.set_xlabel('ROC-AUC')
+                ax.set_title('Task 4: PYOD vs PYTOD')
+                ax.axvline(x=0.5, color='red', linestyle='--', label='Random')
+                from matplotlib.patches import Patch
+                legend_elements = [Patch(facecolor='steelblue', label='PYOD'), Patch(facecolor='orange', label='PYTOD')]
+                ax.legend(handles=legend_elements)
+                fig.tight_layout()
+                fig.savefig(self.loader.output_path('task4_roc_auc.png'), dpi=100)
+                plt.close(fig)
+            except Exception as e:
+                self.logger.error(f"Task4 plot failed: {e}")
             return r
 
         # run selected task only
@@ -121,6 +175,7 @@ class AntifraudPipeline:
         ax.set_xlabel('ROC-AUC')
         ax.set_title('Task 1: VAE vs AE vs Classic OD')
         ax.axvline(x=0.5, color='red', linestyle='--', label='Random')
+        ax.legend()
         fig.tight_layout()
         fig.savefig(self.loader.output_path('task1_roc_auc.png'), dpi=100)
         plt.close(fig)
@@ -137,6 +192,7 @@ class AntifraudPipeline:
         ax.set_xlabel('ROC-AUC')
         ax.set_title('Task 2: Unsupervised Detectors Comparison')
         ax.axvline(x=0.5, color='red', linestyle='--', label='Random')
+        ax.legend()
         fig.tight_layout()
         fig.savefig(self.loader.output_path('task2_roc_auc.png'), dpi=100)
         plt.close(fig)

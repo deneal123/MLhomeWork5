@@ -52,7 +52,6 @@ class ProxyConfig:
         opener = urllib.request.build_opener(*handlers)
         urllib.request.install_opener(opener)
 
-        # also configure environment and git for subprocess operations
         if 'http' in self.proxies:
             os.environ['http_proxy'] = self.proxies['http']
             os.environ['HTTP_PROXY'] = self.proxies['http']

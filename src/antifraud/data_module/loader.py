@@ -9,6 +9,7 @@ from antifraud.config import settings
 
 
 class DataLoader:
+
     def __init__(self, proxy_config=None):
         self.proxy_config = proxy_config or ProxyConfig()
         self.proxy_config.apply()
@@ -23,7 +24,6 @@ class DataLoader:
             data_root_value = data_cfg.get('root', 'data')
         else:
             data_root_value = getattr(data_cfg, 'root', 'data') if data_cfg is not None else 'data'
-
         if isinstance(outputs_cfg, dict):
             output_root_value = outputs_cfg.get('root', 'outputs')
         else:
